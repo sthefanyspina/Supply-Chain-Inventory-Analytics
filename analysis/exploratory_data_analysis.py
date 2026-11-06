@@ -1,360 +1,535 @@
-# ============================================================
-# SUPPLY CHAIN & INVENTORY ANALYTICS
+# ==========================================================
 # EXPLORATORY DATA ANALYSIS (EDA)
-#
-# Areas:
-# A. Inventory Analysis
-# B. Sales & Demand Analysis
-# C. Supplier Analysis
-# D. Warehouse Analysis
-#
-# Outputs:
-# - Analytical CSV files
-# - Data visualizations (PNG)
-# - Executive report (TXT)
-# ============================================================
-
-
-# ============================================================
-# 1. IMPORT LIBRARIES
-# ============================================================
-
-import os
-import warnings
-from pathlib import Path
+# INVENTORY DATASET PROJECT
+# ==========================================================
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-warnings.filterwarnings("ignore")
+sns.set_style("whitegrid")
 
-# ============================================================
-# 2. CONFIGURATION
-# ============================================================
+# ==========================================================
+# LOAD DATA
+# ==========================================================
 
-BASE_DIR = Path("inventory_dataset")
+DATA_PATH = "inventory_dataset"
 
-OUTPUT_DIR = BASE_DIR / "analysis"
+products = pd.read_csv(f"{DATA_PATH}/Products.csv")
+suppliers = pd.read_csv(f"{DATA_PATH}/Suppliers.csv")
+warehouses = pd.read_csv(f"{DATA_PATH}/Warehouses.csv")
+sales = pd.read_csv(f"{DATA_PATH}/Sales.csv")
+purchase_orders = pd.read_csv(f"{DATA_PATH}/Purchase_Orders.csv")
+deliveries = pd.read_csv(f"{DATA_PATH}/Deliveries.csv")
+movements = pd.read_csv(f"{DATA_PATH}/Stock_Movements.csv")
+inventory = pd.read_csv(f"{DATA_PATH}/Inventory_Snapshot.csv")
 
-INVENTORY_DIR = OUTPUT_DIR / "inventory_analysis"
-SALES_DIR = OUTPUT_DIR / "sales_demand_analysis"
-SUPPLIER_DIR = OUTPUT_DIR / "supplier_analysis"
-WAREHOUSE_DIR = OUTPUT_DIR / "warehouse_analysis"
-REPORT_DIR = OUTPUT_DIR / "executive_report"
+# ==========================================================
+# DATE FORMATTING
+# ==========================================================
 
-FOLDERS = [
-    INVENTORY_DIR,
-    SALES_DIR,
-    SUPPLIER_DIR,
-    WAREHOUSE_DIR,
-    REPORT_DIR
-]
+sales["Sale_Date"] = pd.to_datetime(sales["Sale_Date"])
 
-for folder in FOLDERS:
-    folder.mkdir(parents=True, exist_ok=True)
-
-sns.set_theme(style="whitegrid", palette="deep")
-
-plt.rcParams["figure.figsize"] = (12, 6)
-plt.rcParams["axes.titlesize"] = 14
-plt.rcParams["axes.labelsize"] = 11
-
-# ============================================================
-# 3. LOAD DATASETS
-# ============================================================
-
-print("\nLoading datasets...")
-
-REQUIRED_FILES = [
-    "Products.csv",
-    "Suppliers.csv",
-    "Warehouses.csv",
-    "Sales.csv",
-    "Purchase_Orders.csv",
-    "Deliveries.csv",
-    "Stock_Movements.csv",
-    "Inventory_Snapshot.csv"
-]
-
-for filename in REQUIRED_FILES:
-    if not (BASE_DIR / filename).exists():
-        raise FileNotFoundError(
-            f"Dataset not found: {BASE_DIR / filename}"
-        )
-
-products = pd.read_csv(
-    BASE_DIR / "Products.csv"
+purchase_orders["Order_Date"] = pd.to_datetime(
+    purchase_orders["Order_Date"]
 )
 
-suppliers = pd.read_csv(
-    BASE_DIR / "Suppliers.csv"
-)
-
-warehouses = pd.read_csv(
-    BASE_DIR / "Warehouses.csv"
-)
-
-sales = pd.read_csv(
-    BASE_DIR / "Sales.csv",
-    parse_dates=["Sale_Date"]
-)
-
-purchase_orders = pd.read_csv(
-    BASE_DIR / "Purchase_Orders.csv",
-    parse_dates=[
-        "Order_Date",
-        "Expected_Date",
-        "Actual_Receipt_Date"
-    ]
-)
-
-deliveries = pd.read_csv(
-    BASE_DIR / "Deliveries.csv",
-    parse_dates=[
-        "Promised_Date",
-        "Actual_Delivery_Date"
-    ]
-)
-
-stock_movements = pd.read_csv(
-    BASE_DIR / "Stock_Movements.csv",
-    parse_dates=["Movement_Date"]
-)
-
-inventory = pd.read_csv(
-    BASE_DIR / "Inventory_Snapshot.csv",
-    parse_dates=["Snapshot_Date"]
-)
-
-print("Datasets loaded successfully.")
-
-
-# ============================================================
-# 4. DATA QUALITY VALIDATION
-# ============================================================
-
-print("\nValidating data quality...")
-
-datasets = {
-    "Products": products,
-    "Suppliers": suppliers,
-    "Warehouses": warehouses,
-    "Sales": sales,
-    "Purchase_Orders": purchase_orders,
-    "Deliveries": deliveries,
-    "Stock_Movements": stock_movements,
-    "Inventory_Snapshot": inventory
-}
-
-quality_report = []
-
-for name, df in datasets.items():
-
-    quality_report.append({
-        "Dataset": name,
-        "Rows": len(df),
-        "Columns": len(df.columns),
-        "Duplicate_Rows": df.duplicated().sum(),
-        "Missing_Values": df.isna().sum().sum()
-    })
-
-quality_report = pd.DataFrame(quality_report)
-
-quality_report.to_csv(
-    REPORT_DIR / "data_quality_report.csv",
-    index=False
-)
-
-print(quality_report.to_string(index=False))
-
-
-# ============================================================
-# 5. DATA PREPARATION
-# ============================================================
-
-print("\nPreparing datasets...")
-
-# Convert numeric columns
-
-numeric_columns = {
-    "Products": [
-        "Unit_Cost",
-        "Unit_Price",
-        "Safety_Stock",
-        "Reorder_Point",
-        "Target_Stock"
-    ],
-    "Sales": [
-        "Quantity",
-        "Fulfilled_Quantity",
-        "Unit_Price",
-        "Revenue"
-    ],
-    "Inventory": [
-        "Stock_On_Hand",
-        "Stock_Reserved",
-        "Stock_Available",
-        "Inventory_Value"
-    ],
-    "Purchase_Orders": [
-        "Ordered_Quantity",
-        "Received_Quantity"
-    ],
-    "Deliveries": [
-        "Ordered_Quantity",
-        "Delivered_Quantity"
-    ]
-}
-
-dataframes = {
-    "Products": products,
-    "Sales": sales,
-    "Inventory": inventory,
-    "Purchase_Orders": purchase_orders,
-    "Deliveries": deliveries
-}
-
-for dataframe_name, columns in numeric_columns.items():
-
-    df = dataframes[dataframe_name]
-
-    for column in columns:
-
-        df[column] = pd.to_numeric(
-            df[column],
-            errors="coerce"
-        )
-
-# Recalculate available stock
-# This validates the physical and reserved quantities.
-
-inventory["Calculated_Available_Stock"] = (
-    inventory["Stock_On_Hand"]
-    - inventory["Stock_Reserved"]
-)
-
-inventory["Stock_Consistency_Check"] = (
-    inventory["Calculated_Available_Stock"]
-    == inventory["Stock_Available"]
-)
-
-# Calculate sales fulfillment
-
-sales["Unfulfilled_Quantity"] = (
-    sales["Quantity"]
-    - sales["Fulfilled_Quantity"]
-).clip(lower=0)
-
-sales["Is_Partial_Fulfillment"] = (
-    sales["Fulfilled_Quantity"] < sales["Quantity"]
-)
-
-# Calculate purchase order lead time
-
-purchase_orders["Actual_Lead_Time"] = (
-    purchase_orders["Actual_Receipt_Date"]
-    - purchase_orders["Order_Date"]
-).dt.days
-
-purchase_orders["Expected_Lead_Time"] = (
+purchase_orders["Expected_Date"] = pd.to_datetime(
     purchase_orders["Expected_Date"]
-    - purchase_orders["Order_Date"]
-).dt.days
-
-purchase_orders["Delay_Days"] = (
-    purchase_orders["Actual_Receipt_Date"]
-    - purchase_orders["Expected_Date"]
-).dt.days
-
-purchase_orders["Is_Late"] = (
-    purchase_orders["Actual_Receipt_Date"]
-    > purchase_orders["Expected_Date"]
 )
 
-purchase_orders["Is_Incomplete"] = (
-    purchase_orders["Received_Quantity"]
-    < purchase_orders["Ordered_Quantity"]
+purchase_orders["Actual_Receipt_Date"] = pd.to_datetime(
+    purchase_orders["Actual_Receipt_Date"]
 )
 
-purchase_orders["Missing_Quantity"] = (
-    purchase_orders["Ordered_Quantity"]
-    - purchase_orders["Received_Quantity"]
-).clip(lower=0)
+inventory["Snapshot_Date"] = pd.to_datetime(
+    inventory["Snapshot_Date"]
+)
 
-# Calculate delivery performance
+deliveries["Promised_Date"] = pd.to_datetime(
+    deliveries["Promised_Date"]
+)
 
-deliveries["Is_On_Time"] = (
+deliveries["Actual_Delivery_Date"] = pd.to_datetime(
     deliveries["Actual_Delivery_Date"]
-    <= deliveries["Promised_Date"]
 )
 
-deliveries["Is_In_Full"] = (
-    deliveries["Delivered_Quantity"]
-    >= deliveries["Ordered_Quantity"]
-)
+# ==========================================================
+# LAST SNAPSHOT
+# ==========================================================
 
-deliveries["Is_OTIF"] = (
-    deliveries["Is_On_Time"]
-    & deliveries["Is_In_Full"]
-)
+last_snapshot_date = inventory["Snapshot_Date"].max()
 
-# Add product information
+latest_inventory = inventory[
+    inventory["Snapshot_Date"] == last_snapshot_date
+].copy()
 
-inventory = inventory.merge(
-    products[
-        [
-            "Product_ID",
-            "Product_Name",
-            "Category",
-            "Supplier_ID",
-            "Unit_Cost",
-            "Safety_Stock",
-            "Reorder_Point",
-            "Target_Stock"
-        ]
-    ],
+latest_inventory = latest_inventory.merge(
+    products,
     on="Product_ID",
     how="left"
 )
+
+latest_inventory = latest_inventory.merge(
+    warehouses,
+    on="Warehouse_ID",
+    how="left"
+)
+
+print("\n")
+print("="*80)
+print("A. INVENTORY ANALYSIS")
+print("="*80)
+
+# ==========================================================
+# A1. PRODUCTS WITH HIGHEST STOCK
+# ==========================================================
+
+high_stock = (
+    latest_inventory
+    .groupby(["Product_ID","Product_Name"])
+    ["Stock_On_Hand"]
+    .sum()
+    .reset_index()
+    .sort_values("Stock_On_Hand", ascending=False)
+)
+
+print("\nTOP 10 PRODUCTS BY STOCK")
+print(high_stock.head(10))
+
+# ==========================================================
+# A2. PRODUCTS BELOW SAFETY STOCK
+# ==========================================================
+
+below_safety = latest_inventory[
+    latest_inventory["Stock_On_Hand"]
+    <
+    latest_inventory["Safety_Stock"]
+]
+
+below_safety_summary = (
+    below_safety
+    .groupby(["Product_ID","Product_Name"])
+    ["Stock_On_Hand"]
+    .sum()
+    .reset_index()
+)
+
+print("\nPRODUCTS BELOW SAFETY STOCK")
+print(below_safety_summary.head(20))
+
+print(
+    f"\nNumber of critical products: "
+    f"{below_safety_summary['Product_ID'].nunique()}"
+)
+
+# ==========================================================
+# A3. EXCESS INVENTORY
+# ==========================================================
+
+excess_inventory = latest_inventory[
+    latest_inventory["Stock_On_Hand"]
+    >
+    latest_inventory["Target_Stock"]
+]
+
+excess_summary = (
+    excess_inventory
+    .groupby(["Product_ID","Product_Name"])
+    ["Stock_On_Hand"]
+    .sum()
+    .reset_index()
+)
+
+print("\nPRODUCTS WITH EXCESS INVENTORY")
+print(excess_summary.head(20))
+
+# ==========================================================
+# A4. WAREHOUSE WITH HIGHEST STOCK VALUE
+# ==========================================================
+
+warehouse_value = (
+    latest_inventory
+    .groupby("Warehouse_Name")
+    ["Inventory_Value"]
+    .sum()
+    .sort_values(ascending=False)
+)
+
+print("\nINVENTORY VALUE BY WAREHOUSE")
+print(warehouse_value)
+
+# ==========================================================
+# A5. INVENTORY TREND
+# ==========================================================
+
+inventory_evolution = (
+    inventory
+    .groupby("Snapshot_Date")
+    ["Inventory_Value"]
+    .sum()
+)
+
+plt.figure(figsize=(14,6))
+
+inventory_evolution.plot()
+
+plt.title("Inventory Value Evolution")
+plt.ylabel("Inventory Value")
+plt.xlabel("Date")
+plt.tight_layout()
+plt.show()
+
+# ==========================================================
+# SALES & DEMAND ANALYSIS
+# ==========================================================
+
+print("\n")
+print("="*80)
+print("B. SALES & DEMAND ANALYSIS")
+print("="*80)
 
 sales = sales.merge(
     products[
         [
             "Product_ID",
             "Product_Name",
-            "Category",
-            "Unit_Cost"
+            "Category"
         ]
     ],
     on="Product_ID",
     how="left"
 )
 
-purchase_orders = purchase_orders.merge(
-    suppliers[
+# ==========================================================
+# B1. HIGHEST DEMAND PRODUCTS
+# ==========================================================
+
+highest_demand = (
+    sales
+    .groupby(["Product_ID","Product_Name"])
+    ["Quantity"]
+    .sum()
+    .sort_values(ascending=False)
+)
+
+print("\nTOP 10 PRODUCTS BY DEMAND")
+print(highest_demand.head(10))
+
+# ==========================================================
+# B2. LOWEST DEMAND PRODUCTS
+# ==========================================================
+
+lowest_demand = (
+    sales
+    .groupby(["Product_ID","Product_Name"])
+    ["Quantity"]
+    .sum()
+    .sort_values(ascending=True)
+)
+
+print("\nLOWEST DEMAND PRODUCTS")
+print(lowest_demand.head(10))
+
+# ==========================================================
+# B3. MONTHLY SALES EVOLUTION
+# ==========================================================
+
+sales["YearMonth"] = (
+    sales["Sale_Date"]
+    .dt.to_period("M")
+    .astype(str)
+)
+
+monthly_sales = (
+    sales
+    .groupby("YearMonth")
+    ["Revenue"]
+    .sum()
+)
+
+plt.figure(figsize=(16,6))
+
+monthly_sales.plot()
+
+plt.title("Monthly Revenue Evolution")
+plt.ylabel("Revenue")
+plt.xlabel("Month")
+plt.xticks(rotation=45)
+
+plt.tight_layout()
+plt.show()
+
+# ==========================================================
+# B4. PARTIAL FULFILLMENT
+# ==========================================================
+
+sales["Fill_Rate"] = (
+    sales["Fulfilled_Quantity"]
+    /
+    sales["Quantity"]
+)
+
+partial_orders = sales[
+    sales["Fill_Rate"] < 1
+]
+
+print(
+    f"\nPartial fulfillment sales: "
+    f"{len(partial_orders):,}"
+)
+
+print(
+    f"Service level: "
+    f"{sales['Fill_Rate'].mean():.2%}"
+)
+
+# ==========================================================
+# B5. REVENUE BY CATEGORY
+# ==========================================================
+
+category_revenue = (
+    sales
+    .groupby("Category")
+    ["Revenue"]
+    .sum()
+    .sort_values(ascending=False)
+)
+
+print("\nREVENUE BY CATEGORY")
+print(category_revenue)
+
+plt.figure(figsize=(10,6))
+
+category_revenue.plot(
+    kind="bar"
+)
+
+plt.title("Revenue by Category")
+
+plt.tight_layout()
+plt.show()
+
+# ==========================================================
+# SUPPLIER ANALYSIS
+# ==========================================================
+
+print("\n")
+print("="*80)
+print("C. SUPPLIER ANALYSIS")
+print("="*80)
+
+supplier_orders = (
+    purchase_orders
+    .merge(
+        suppliers,
+        on="Supplier_ID",
+        how="left"
+    )
+)
+
+# ==========================================================
+# C1. HIGHEST LEAD TIME
+# ==========================================================
+
+leadtime_analysis = (
+    suppliers
+    .sort_values(
+        "Contract_Lead_Time",
+        ascending=False
+    )
+)
+
+print("\nSUPPLIERS WITH HIGHEST LEAD TIME")
+print(
+    leadtime_analysis[
         [
-            "Supplier_ID",
             "Supplier_Name",
-            "Region",
             "Contract_Lead_Time"
         ]
-    ],
-    on="Supplier_ID",
-    how="left"
+    ].head(10)
 )
 
-inventory = inventory.merge(
-    warehouses[
-        [
-            "Warehouse_ID",
-            "Warehouse_Name"
-        ]
-    ],
-    on="Warehouse_ID",
-    how="left"
+# ==========================================================
+# C2. DELAYED PURCHASE ORDERS
+# ==========================================================
+
+supplier_orders["Delay_Days"] = (
+    supplier_orders["Actual_Receipt_Date"]
+    -
+    supplier_orders["Expected_Date"]
+).dt.days
+
+late_pos = supplier_orders[
+    supplier_orders["Delay_Days"] > 0
+]
+
+print(
+    f"\nLate purchase orders: "
+    f"{len(late_pos):,}"
 )
 
-print("Data preparation completed.")
+supplier_delay = (
+    late_pos
+    .groupby("Supplier_Name")
+    ["Delay_Days"]
+    .mean()
+    .sort_values(ascending=False)
+)
 
+print("\nAVERAGE DELAY BY SUPPLIER")
+print(supplier_delay.head(10))
+
+# ==========================================================
+# C3. INCOMPLETE ORDERS
+# ==========================================================
+
+incomplete_orders = supplier_orders[
+    supplier_orders["Received_Quantity"]
+    <
+    supplier_orders["Ordered_Quantity"]
+]
+
+print(
+    f"\nIncomplete Purchase Orders: "
+    f"{len(incomplete_orders):,}"
+)
+
+# ==========================================================
+# C4. PURCHASE VOLUME
+# ==========================================================
+
+purchase_volume = (
+    supplier_orders
+    .groupby("Supplier_Name")
+    ["Ordered_Quantity"]
+    .sum()
+    .sort_values(ascending=False)
+)
+
+print("\nTOP SUPPLIERS BY PURCHASE VOLUME")
+print(purchase_volume.head(10))
+
+# ==========================================================
+# WAREHOUSE ANALYSIS
+# ==========================================================
+
+print("\n")
+print("="*80)
+print("D. WAREHOUSE ANALYSIS")
+print("="*80)
+
+# ==========================================================
+# D1. STOCK BY WAREHOUSE
+# ==========================================================
+
+stock_by_warehouse = (
+    latest_inventory
+    .groupby("Warehouse_Name")
+    ["Stock_On_Hand"]
+    .sum()
+)
+
+print("\nTOTAL STOCK BY WAREHOUSE")
+print(stock_by_warehouse)
+
+# ==========================================================
+# D2. INVENTORY VALUE
+# ==========================================================
+
+inventory_value_wh = (
+    latest_inventory
+    .groupby("Warehouse_Name")
+    ["Inventory_Value"]
+    .sum()
+)
+
+print("\nINVENTORY VALUE BY WAREHOUSE")
+print(inventory_value_wh)
+
+# ==========================================================
+# D3. CRITICAL PRODUCTS
+# ==========================================================
+
+critical_products = (
+    latest_inventory
+    .assign(
+        Critical=
+        latest_inventory["Stock_On_Hand"]
+        <
+        latest_inventory["Safety_Stock"]
+    )
+)
+
+critical_by_wh = (
+    critical_products
+    .groupby("Warehouse_Name")
+    ["Critical"]
+    .sum()
+)
+
+print("\nCRITICAL PRODUCTS BY WAREHOUSE")
+print(critical_by_wh)
+
+# ==========================================================
+# D4. AVAILABLE STOCK DISTRIBUTION
+# ==========================================================
+
+plt.figure(figsize=(10,6))
+
+sns.boxplot(
+    data=latest_inventory,
+    x="Warehouse_Name",
+    y="Stock_Available"
+)
+
+plt.title(
+    "Available Stock Distribution by Warehouse"
+)
+
+plt.xticks(rotation=15)
+
+plt.tight_layout()
+plt.show()
+
+# ==========================================================
+# OPERATIONAL ISSUES FOR DASHBOARD
+# ==========================================================
+
+print("\n")
+print("="*80)
+print("MAIN OPERATIONAL ISSUES IDENTIFIED")
+print("="*80)
+
+print("""
+1. Products below safety stock
+   -> Risk of stockout.
+
+2. Products above target stock
+   -> Excess working capital.
+
+3. Partial fulfillment orders
+   -> Service level reduction.
+
+4. Suppliers with frequent delays
+   -> Supply chain instability.
+
+5. Suppliers delivering incomplete quantities
+   -> Inventory replenishment failures.
+
+6. Warehouses concentrating most inventory value
+   -> Capital concentration risk.
+
+7. Categories with highest demand growth
+   -> Replenishment priority.
+
+8. Significant imbalance between warehouses
+   -> Need for stock redistribution.
+
+9. Seasonal sales peaks
+   -> Demand planning opportunity.
+
+10. Products generating high revenue but low inventory
+    -> Immediate replenishment candidates.
+""")
